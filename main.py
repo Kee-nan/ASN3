@@ -2,12 +2,12 @@ import re
 import pandas as pd
 import plotly.express as px
 from packaging import version as packaging_version
+import numpy as np
 
 # Dash components for interactivity
 from dash import dcc, html, dash_table, Dash
 from dash.dependencies import Input, Output
-
-from config import RELEASE_FILES, PATCH_COLUMNS
+from config import RELEASE_FILES, PATCH_COLUMNS, REVIEW_FILES, REVIEW_COLUMNS
 
 def clean_version(v):
     """
@@ -20,55 +20,112 @@ def clean_version(v):
         return pattern.group(1)
     return s
 
+def extract_major_minor(version):
+    match = re.search(r'(\d+)\.(\d+)', str(version))
+    if match:
+        major, minor = match.groups()
+        return f"{major}.{minor}"
+    else:
+        return None  # or "0.0" if you prefer
+
 def make_plot(file_key):
     """
     Reads CSV data and groups it by release version (for Zoom/Webex) or release date (for Firefox).
     Returns the Plotly figure and the DataFrame.
     """
-    release_file_path = RELEASE_FILES[file_key]
+    release_file_path = RELEASE_FILES[f"{file_key}_releases"]
+    review_file_path = REVIEW_FILES[f"{file_key}_reviews"]
     try:
-        df = pd.read_csv(release_file_path, encoding='cp1252')
+        df_release = pd.read_csv(release_file_path, encoding='cp1252')
     except UnicodeDecodeError:
-        df = pd.read_csv(release_file_path, encoding='latin1')
+        df_release = pd.read_csv(release_file_path, encoding='latin1')
+
+    try:
+        df_review = pd.read_csv(review_file_path, encoding='cp1252')
+    except UnicodeDecodeError:
+        df_review = pd.read_csv(review_file_path, encoding='latin1')
     
     # Convert release date column to datetime
     release_date_col = PATCH_COLUMNS["Date"]
-    df[release_date_col] = pd.to_datetime(df[release_date_col], errors='coerce')
+    review_date_col = REVIEW_COLUMNS.get("Date")
+    df_release[release_date_col] = pd.to_datetime(df_release[release_date_col], errors='coerce')
+    df_review[review_date_col] = pd.to_datetime(df_review[review_date_col], errors='coerce')
     
     version_col = PATCH_COLUMNS.get("Version")
+    rating_col = REVIEW_COLUMNS.get("Rating")
+
     
-    if version_col and (version_col in df.columns) and (file_key in ["webex_releases", "zoom_releases"]):
-        # Group by trimmed release version
-        grouped = df.groupby(version_col).size().reset_index(name='count')
+    release_name = f"{file_key}_releases"
+    if version_col and (version_col in df_release.columns) and (release_name in ["webex_releases", "zoom_releases"]):
+        # Group by trimmed release version (zoom/webex)
+        grouped = df_release.groupby(version_col).size().reset_index(name='count')
         grouped["clean_version"] = grouped[version_col].apply(clean_version)
         grouped["sort_key"] = grouped["clean_version"].apply(lambda x: packaging_version.parse(x))
         grouped = grouped.sort_values("sort_key")
         grouped[version_col] = grouped["clean_version"]
-        grouped = grouped.drop(columns=["clean_version", "sort_key"])
+        # grouped = grouped.drop(columns=["clean_version", "sort_key"])
         x_col = version_col
+
+        # Handle reviews
+        # Webex and Zoom's versions are formatted slightly different in reviews, and thus need different functions
+        if file_key == "webex":
+            df_review["clean_version"] = df_review[REVIEW_COLUMNS.get("Version")].apply(extract_major_minor)
+        elif file_key == "zoom":
+            df_review["clean_version"] = df_review[REVIEW_COLUMNS.get("Version")].apply(clean_version)
+        
+        avg_ratings = df_review.groupby("clean_version")[rating_col].mean().reset_index()
+        avg_ratings.rename(columns={rating_col: "avg_rating"}, inplace=True)
+        review_counts = df_review.groupby("clean_version").size().reset_index(name="review_count")
+
+        grouped = grouped.merge(avg_ratings, on="clean_version", how="left")
+        grouped = grouped.merge(review_counts, on="clean_version", how="left")
     else:
-        # Group by release date (Firefox or other)
-        grouped = df.groupby(release_date_col).size().reset_index(name='count')
+        # Group by date (Firefox)
+        grouped = df_release.groupby(release_date_col).size().reset_index(name='count')
         grouped = grouped.sort_values(release_date_col)
         x_col = release_date_col
 
-    # Create a y value. We'll keep most points aligned on zero.
-    grouped['y_value'] = 0.0  # Base level for timeline.
-    # Optionally add a small jitter if overlapping is a concern:
-    if len(grouped) > 1:
-        grouped['y_value'] = [0.05 * i for i in range(len(grouped))]
+        # Handle reviews for y axis (Firefox needs to handle by date, not version)
+        df_review[review_date_col] = pd.to_datetime(df_review[review_date_col], errors='coerce')
+        grouped = grouped.sort_values(x_col)
+        df_review = df_review.sort_values(review_date_col)
 
-    # Create the scatter plot
-    # Map both 'size' and 'color' to the count so users have a visual legend (with colorbar)
+        # Get a list of all the feature release dates
+        release_dates = grouped[x_col].to_list()
+
+        # Need max time to grab all reviews that happen after the last feature release
+        release_dates.append(pd.Timestamp.max)
+
+        # Each review is binned by its date to the feature release date that happened before it
+        df_review['release_bin'] = pd.cut(
+            df_review[review_date_col],
+            bins=release_dates,
+            labels=grouped[x_col],
+            right=False # Don't include reviews that happen on the next review day in the previous bin [x, y)
+        )
+
+        df_review['release_bin'] = pd.to_datetime(df_review['release_bin'])
+
+        review_counts = df_review.groupby('release_bin').size().reset_index(name='review_count')
+
+        avg_ratings = df_review.groupby('release_bin')[rating_col].mean().reset_index()
+        avg_ratings.rename(columns={rating_col: "avg_rating"}, inplace=True)
+
+        grouped = grouped.merge(avg_ratings, left_on=x_col, right_on='release_bin', how='left')
+        grouped = grouped.merge(review_counts, left_on=x_col, right_on='release_bin', how='left')
+
+
+    grouped['y_value'] = grouped['avg_rating'].fillna(3)
+    
     fig = px.scatter(
         grouped,
         x=x_col,
         y='y_value',
         size='count',
-        color='count',
+        color='review_count',
         color_continuous_scale='Blues',
         title=f"Interactive Timeline of Releases ({file_key.replace('_releases', '').capitalize()})",
-        labels={'count': 'Number of Features', 'y_value': ''},
+        labels={'count': 'Number of Features', 'review_count': 'Number of Reviews', 'y_value': ''},
     )
     
     # Add a timeline baseline
@@ -85,18 +142,26 @@ def make_plot(file_key):
     fig.add_annotation(
         xref="paper", yref="paper",
         x=0, y=1.05,
-        text="Dot size & color represent # of features",
+        text="Dot size = # Features, Color = # of reviews",
         showarrow=False,
         font=dict(family="Arial", size=12, color="#555")
     )
     
     fig.update_layout(
         xaxis_title="Release Version" if x_col == version_col else "Release Date",
-        yaxis=dict(showgrid=False, visible=False, zeroline=False),
+        yaxis_title="Average Rating (1-5)",
+        yaxis=dict(
+            showgrid=True,
+            range=[1,5],
+            dtick=1,
+            title="Average Rating",
+            showline=True,
+            mirror=True
+        ),
         plot_bgcolor="white",
         title_x=0.5,  # Center the title
         margin=dict(t=70, l=50, r=50, b=70),
-        font=dict(family="Arial", size=12, color="#333")
+        font=dict(family="Arial", size=12, color="#333"),
     )
     
     # Adjust x-axis tick formatting for clarity
@@ -108,28 +173,32 @@ def make_plot(file_key):
     )
     
     # Enhanced hover template with consistent styling
-    if file_key in ["webex_releases", "zoom_releases"]:
+    if file_key in ["webex", "zoom"]:
         hover_template = (
             "<b style='font-size: 14px'>Version: %{x}</b><br>"
             "<b>Features:</b> %{marker.size}<br>"
+            "<b># Reviews:</b> %{marker.color:.0f}<br>"
+            "<b>Avg Rating:</b> %{y:.2f}<br>"
             "<i>Click for details</i><extra></extra>"
         )
     else:
         hover_template = (
             "<b style='font-size: 14px'>Date: %{x}</b><br>"
             "<b>Features:</b> %{marker.size}<br>"
+            "<b># Reviews:</b> %{marker.color:.0f}<br>"
+            "<b>Avg Rating:</b> %{y:.2f}<br>"
             "<i>Click for details</i><extra></extra>"
         )
     fig.update_traces(hovertemplate=hover_template)
     
-    return fig, df
+    return fig, df_release, df_review
 
 # Create the Dash app instance
 app = Dash(__name__)
 
-# Set file_key here: "firefox_releases", "zoom_releases", or "webex_releases"
-file_key = "webex_releases"
-fig, df = make_plot(file_key)
+# Change this to firefox_releases, zoom_releases or webex_releases
+app_name = "firefox"
+fig, df_release, df_reviews = make_plot(app_name)
 
 app.layout = html.Div([
     # Header
@@ -178,12 +247,12 @@ def display_feature_details(clickData):
     version = PATCH_COLUMNS.get("Version")
     release_date = PATCH_COLUMNS["Date"]
     
-    # Filter the original DataFrame based on the selected point
-    if version and (version in df.columns):
-        mask = df[version].apply(lambda v: clean_version(v)) == x_value
-        filtered = df[mask]
+    # Find all the individual features within a grouping so we can grrab they data
+    if version and (version in df_release.columns):
+        mask = df_release[version].apply(lambda v: clean_version(v)) == x_value
+        filtered = df_release[mask]
     else:
-        filtered = df[df[release_date] == x_value]
+        filtered = df_release[df_release[release_date] == x_value]
     
     if filtered.empty:
         return "No features found for the selected dot."
