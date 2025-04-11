@@ -18,6 +18,7 @@ RELEASE_FILES = {
 REVIEW_COLUMNS = {
     "Rating": "score", # score is the 1-5 star rating they left for their review
     "Date": "at", # at is the date the review was left
+    "Version": "appVersion",
 }
 
 PATCH_COLUMNS = {
