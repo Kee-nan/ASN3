@@ -19,9 +19,11 @@ REVIEW_COLUMNS = {
     "Rating": "score", # score is the 1-5 star rating they left for their review
     "Date": "at", # at is the date the review was left
     "Version": "appVersion",
+    "Description": "content",
 }
 
 PATCH_COLUMNS = {
     "Date": "Release Date", # Date the patch was released
     "Version": "Release Version", # Version the Company made for this releae
+    "Description": "Feature Description",
 }

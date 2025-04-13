@@ -197,7 +197,7 @@ def make_plot(file_key):
 app = Dash(__name__)
 
 # Change this to firefox_releases, zoom_releases or webex_releases
-app_name = "firefox"
+app_name = "zoom"
 fig, df_release, df_reviews = make_plot(app_name)
 
 app.layout = html.Div([
