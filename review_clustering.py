@@ -14,6 +14,7 @@ app_name = "Firefox"
 review_file_path = f'./Reviews/{app_name}_reviews.csv'
 release_file_path = f'./Releases/{app_name}_releases.csv'
 
+# Get the words set from nltk for later...
 nltk.download('words')
 english_words = set(words.words())
 
@@ -98,11 +99,12 @@ def is_valid_label(label, threshold=0.3):
     Here, a valid word is one that consists solely of alphabetic characters and is found
     in the NLTK English words corpus.
     """
+    # Need this as sometimes this spits out nonsensical labels due to the nature of reviews
     tokens = re.findall(r'\w+', label)
     if not tokens:
         return False
     valid_count = sum(1 for token in tokens if token.isalpha() and token in english_words)
-    # print for debugging: print(label, valid_count, len(tokens))
+
     return (valid_count / len(tokens)) >= threshold
 
 # Clean junk out of our reviews
@@ -194,6 +196,7 @@ for version in versions:
 
         # Extract top terms using TF-IDF
         # Explanation: https://www.learndatasci.com/glossary/tf-idf-term-frequency-inverse-document-frequency/
+        # This isn't perfect, but can help summarize for us.
         tfidf = TfidfVectorizer(ngram_range=(3,4), strip_accents='unicode', max_features=5, stop_words='english')
         tfidf_matrix = tfidf.fit_transform(filtered_texts)
         top_terms = tfidf.get_feature_names_out()
