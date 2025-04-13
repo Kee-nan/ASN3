@@ -1,13 +1,14 @@
 import re
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objs as go
 from packaging import version as packaging_version
 import numpy as np
 
 # Dash components for interactivity
 from dash import dcc, html, dash_table, Dash
 from dash.dependencies import Input, Output
-from config import RELEASE_FILES, PATCH_COLUMNS, REVIEW_FILES, REVIEW_COLUMNS
+from config import RELEASE_FILES, PATCH_COLUMNS, REVIEW_FILES, REVIEW_COLUMNS, CLUSTER_FILES
 
 def clean_version(v):
     """
@@ -35,6 +36,8 @@ def make_plot(file_key):
     """
     release_file_path = RELEASE_FILES[f"{file_key}_releases"]
     review_file_path = REVIEW_FILES[f"{file_key}_reviews"]
+    cluster_summary_path = CLUSTER_FILES[f"{file_key}_summary"]
+    cluster_reviews_path = CLUSTER_FILES[f"{file_key}_clustered_reviews"]
     try:
         df_release = pd.read_csv(release_file_path, encoding='cp1252')
     except UnicodeDecodeError:
@@ -124,9 +127,28 @@ def make_plot(file_key):
         size='count',
         color='review_count',
         color_continuous_scale='Blues',
+        symbol_sequence=["diamond"],
         title=f"Interactive Timeline of Releases ({file_key.replace('_releases', '').capitalize()})",
         labels={'count': 'Number of Features', 'review_count': 'Number of Reviews', 'y_value': ''},
     )
+
+    df_summary = pd.read_csv(cluster_summary_path)
+    df_cluster = pd.read_csv(cluster_reviews_path)
+
+    overlay_df = df_summary.copy()
+    overlay_df = overlay_df.sort_values('version')
+
+    fig.add_trace(go.Scatter(
+        x=overlay_df["version"],
+        y=overlay_df["avg_score"],
+        mode='markers',
+        marker=dict(
+            size=overlay_df["num_reviews"] / 50,  # you have to scale manually
+            color=overlay_df["num_reviews"],
+            colorscale='matter',
+        ),
+        name="Cluster Summary"
+    ))
     
     # Add a timeline baseline
     fig.add_shape(
