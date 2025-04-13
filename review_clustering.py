@@ -162,6 +162,8 @@ for version in versions:
     version_embeddings = np.array(version_reviews['embedding'].tolist())
 
     # Cluster with HDBSCAN
+    # If you want an explanation:
+    # https://hdbscan.readthedocs.io/en/latest/how_hdbscan_works.html
     clusterer = hdbscan.HDBSCAN(min_cluster_size=5, prediction_data=True)
     labels = clusterer.fit_predict(version_embeddings)
 
@@ -191,6 +193,7 @@ for version in versions:
             continue
 
         # Extract top terms using TF-IDF
+        # Explanation: https://www.learndatasci.com/glossary/tf-idf-term-frequency-inverse-document-frequency/
         tfidf = TfidfVectorizer(ngram_range=(3,4), strip_accents='unicode', max_features=5, stop_words='english')
         tfidf_matrix = tfidf.fit_transform(filtered_texts)
         top_terms = tfidf.get_feature_names_out()
