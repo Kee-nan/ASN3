@@ -8,6 +8,7 @@ from nltk.corpus import words
 from sentence_transformers import SentenceTransformer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from config import RELEASE_FILES, PATCH_COLUMNS, REVIEW_FILES, REVIEW_COLUMNS
+import os
 
 
 def clean_version(v):
@@ -48,18 +49,6 @@ def is_informative(text):
     unique_words = set(words)
     return len(words) >= 5 and len(unique_words) >= 3
 
-# Try loading files with different encodings
-try:
-    releases = pd.read_csv(release_file_path, encoding='cp1252')
-except UnicodeDecodeError:
-    releases = pd.read_csv(release_file_path, encoding='latin1')
-
-try:
-    reviews = pd.read_csv(review_file_path, encoding='cp1252')
-except UnicodeDecodeError:
-    reviews = pd.read_csv(review_file_path, encoding='latin1')
-
-reviews = reviews.dropna(subset=[REVIEW_COLUMNS["Version"]])
 
 # 2. Preprocess text
 def clean_text(text):
@@ -85,6 +74,8 @@ def clean_text(text):
     return ""
 
 # Function to check if a cluster label is valid (i.e., not nonsensical)
+nltk.download('words')
+english_words = set(words.words())
 def is_valid_label(label, threshold=0.3):
     """
     Returns True if the fraction of valid English words in the label exceeds the threshold.
@@ -101,6 +92,23 @@ def is_valid_label(label, threshold=0.3):
 
 
 def create_cluster(app_name: str):
+
+    review_file_path = f'./Reviews/{app_name}_reviews.csv'
+    release_file_path = f'./Releases/{app_name}_releases.csv'
+
+    # Try loading files with different encodings
+    try:
+        releases = pd.read_csv(release_file_path, encoding='cp1252')
+    except UnicodeDecodeError:
+        releases = pd.read_csv(release_file_path, encoding='latin1')
+
+    try:
+        reviews = pd.read_csv(review_file_path, encoding='cp1252')
+    except UnicodeDecodeError:
+        reviews = pd.read_csv(review_file_path, encoding='latin1')
+
+    reviews = reviews.dropna(subset=[REVIEW_COLUMNS["Version"]])
+
     # Clean junk out of our reviews
     reviews['cleaned_content'] = reviews['content'].apply(clean_text)
     # Filter out any reviews that don't seem like they'll actually be useful
@@ -112,11 +120,11 @@ def create_cluster(app_name: str):
     reviews['embedding'] = embeddings.tolist()
 
     # Get our versions like we do in main
-    if app_name == "Zoom":
+    if app_name.lower() == "zoom":
         reviews["clean_version"] = reviews[REVIEW_COLUMNS.get("Version")].apply(clean_version)
-    elif app_name == "Webex":
+    elif app_name.lower() == "webex":
         reviews["clean_version"] = reviews[REVIEW_COLUMNS.get("Version")].apply(extract_major_minor)
-    elif app_name == "Firefox":
+    elif app_name.lower() == "firefox":
         # Firefox has no versions for features, so we gotta do some more work here
         review_date_col = REVIEW_COLUMNS.get("Date")
         release_date_col = PATCH_COLUMNS.get("Date")
@@ -138,7 +146,7 @@ def create_cluster(app_name: str):
         releases['clean_version'] = releases[release_date_col]
 
 
-    if app_name != "Firefox":
+    if app_name.lower() != "firefox":
         releases["clean_version"] = releases[PATCH_COLUMNS.get("Version")].apply(clean_version)
     versions = releases['clean_version'].dropna().unique()
 
@@ -224,6 +232,8 @@ def create_cluster(app_name: str):
     # Combine all the clustered reviews and cluster summaries into DataFrames
     if clustered_reviews_list:
         all_clustered_reviews = pd.concat(clustered_reviews_list, ignore_index=True)
+        # Create Clusters directory if it doesn't exist
+        os.makedirs("./Clusters", exist_ok=True)
         # Save the detailed review clustering to CSV
         all_clustered_reviews.to_csv(f"./Clusters/{app_name}_clustered_reviews_output.csv", index=False)
         print(f"Saved detailed clustered reviews to 'Clusters/{app_name}_clustered_reviews_output.csv'")
@@ -232,6 +242,8 @@ def create_cluster(app_name: str):
 
     if cluster_summary_list:
         cluster_summary_df = pd.DataFrame(cluster_summary_list)
+        # Create Clusters directory if it doesn't exist
+        os.makedirs("./Clusters", exist_ok=True)
         # Save the cluster summary to CSV
         cluster_summary_df.to_csv(f"./Clusters/{app_name}_cluster_summary.csv", index=False)
         print(f"Saved cluster summary to 'Clusters/{app_name}_cluster_summary.csv'")

@@ -3,7 +3,9 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objs as go
 from packaging import version as packaging_version
+from review_clustering import create_cluster
 import numpy as np
+import os
 
 # Dash components for interactivity
 from dash import dcc, html, dash_table, Dash
@@ -48,6 +50,12 @@ class TraceVisualizer:
         review_file_path = REVIEW_FILES[f"{file_key}_reviews"]
         cluster_summary_path = CLUSTER_FILES[f"{file_key}_summary"]
         cluster_reviews_path = CLUSTER_FILES[f"{file_key}_clustered_reviews"]
+        
+        # Check if cluster files exist, if not create them
+        if not os.path.exists(cluster_summary_path) or not os.path.exists(cluster_reviews_path):
+            print(f"Cluster files for {file_key} not found. Generating them now...")
+            create_cluster(self.app_name)
+        
         try:
             df_release = pd.read_csv(release_file_path, encoding='cp1252')
         except UnicodeDecodeError:
@@ -347,9 +355,10 @@ class TraceVisualizer:
     def run(self, debug=True):
         self.app.run(debug=debug)
 
-def main():
-    visualizer = TraceVisualizer(app_name="firefox")
+def main(app_name: str):
+    app_name = app_name.lower()
+    visualizer = TraceVisualizer(app_name=app_name)
     visualizer.run(debug=True)
 
 if __name__ == '__main__':
-    main()
+    main("Zoom")
