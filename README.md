@@ -3,7 +3,7 @@
 Should be able to git clone into your workspace 
 Create a virtual environment and pip install the depencencies in the requirements.txt file
 
-Each folder, releases and reveiws, has both an excel file and a csv file for each companies respective thing
+Each folder, releases and reveiws, have both an excel file and a CSV file for each companies respective thing
 
 ### To use this repository
 - Setup a virtualenv `python -m venv venv`
