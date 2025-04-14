@@ -3,20 +3,12 @@ import nltk
 import hdbscan
 import pandas as pd
 import numpy as np
+import argparse
 from nltk.corpus import words
 from sentence_transformers import SentenceTransformer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from config import RELEASE_FILES, PATCH_COLUMNS, REVIEW_FILES, REVIEW_COLUMNS
 
-app_name = "Firefox"
-
-# Load data
-review_file_path = f'./Reviews/{app_name}_reviews.csv'
-release_file_path = f'./Releases/{app_name}_releases.csv'
-
-# Get the words set from nltk for later...
-nltk.download('words')
-english_words = set(words.words())
 
 def clean_version(v):
     """
@@ -107,139 +99,147 @@ def is_valid_label(label, threshold=0.3):
 
     return (valid_count / len(tokens)) >= threshold
 
-# Clean junk out of our reviews
-reviews['cleaned_content'] = reviews['content'].apply(clean_text)
-# Filter out any reviews that don't seem like they'll actually be useful
-reviews = reviews[reviews['cleaned_content'].apply(is_informative)]
 
-# Embed the cleaned review texts
-model = SentenceTransformer('all-MiniLM-L6-v2')
-embeddings = model.encode(reviews['cleaned_content'].tolist(), show_progress_bar=True)
-reviews['embedding'] = embeddings.tolist()
+def create_cluster(app_name: str):
+    # Clean junk out of our reviews
+    reviews['cleaned_content'] = reviews['content'].apply(clean_text)
+    # Filter out any reviews that don't seem like they'll actually be useful
+    reviews = reviews[reviews['cleaned_content'].apply(is_informative)]
 
-# Get our versions like we do in main
-if app_name == "Zoom":
-    reviews["clean_version"] = reviews[REVIEW_COLUMNS.get("Version")].apply(clean_version)
-elif app_name == "Webex":
-    reviews["clean_version"] = reviews[REVIEW_COLUMNS.get("Version")].apply(extract_major_minor)
-elif app_name == "Firefox":
-    # Firefox has no versions for features, so we gotta do some more work here
-    review_date_col = REVIEW_COLUMNS.get("Date")
-    release_date_col = PATCH_COLUMNS.get("Date")
-    releases[release_date_col] = pd.to_datetime(releases[release_date_col], errors='coerce')
-    reviews[review_date_col] = pd.to_datetime(reviews[review_date_col], errors='coerce')
-    reviews = reviews.sort_values(review_date_col)
+    # Embed the cleaned review texts
+    model = SentenceTransformer('all-MiniLM-L6-v2')
+    embeddings = model.encode(reviews['cleaned_content'].tolist(), show_progress_bar=True)
+    reviews['embedding'] = embeddings.tolist()
 
-    release_dates = sorted(releases[release_date_col].dropna().unique().tolist())
-    release_dates.append(pd.Timestamp.max)
+    # Get our versions like we do in main
+    if app_name == "Zoom":
+        reviews["clean_version"] = reviews[REVIEW_COLUMNS.get("Version")].apply(clean_version)
+    elif app_name == "Webex":
+        reviews["clean_version"] = reviews[REVIEW_COLUMNS.get("Version")].apply(extract_major_minor)
+    elif app_name == "Firefox":
+        # Firefox has no versions for features, so we gotta do some more work here
+        review_date_col = REVIEW_COLUMNS.get("Date")
+        release_date_col = PATCH_COLUMNS.get("Date")
+        releases[release_date_col] = pd.to_datetime(releases[release_date_col], errors='coerce')
+        reviews[review_date_col] = pd.to_datetime(reviews[review_date_col], errors='coerce')
+        reviews = reviews.sort_values(review_date_col)
 
-    reviews['clean_version'] = pd.cut(
-        reviews[review_date_col],
-        bins=release_dates,
-        labels=releases[release_date_col].sort_values().unique(),
-        right=False # Don't include reviews that happen on the next review day in the previous bin [x, y)
-    )
+        release_dates = sorted(releases[release_date_col].dropna().unique().tolist())
+        release_dates.append(pd.Timestamp.max)
 
-    reviews['clean_version'] = pd.to_datetime(reviews['clean_version'])
-    releases['clean_version'] = releases[release_date_col]
+        reviews['clean_version'] = pd.cut(
+            reviews[review_date_col],
+            bins=release_dates,
+            labels=releases[release_date_col].sort_values().unique(),
+            right=False # Don't include reviews that happen on the next review day in the previous bin [x, y)
+        )
+
+        reviews['clean_version'] = pd.to_datetime(reviews['clean_version'])
+        releases['clean_version'] = releases[release_date_col]
 
 
-if app_name != "Firefox":
-    releases["clean_version"] = releases[PATCH_COLUMNS.get("Version")].apply(clean_version)
-versions = releases['clean_version'].dropna().unique()
+    if app_name != "Firefox":
+        releases["clean_version"] = releases[PATCH_COLUMNS.get("Version")].apply(clean_version)
+    versions = releases['clean_version'].dropna().unique()
 
-# Prepare lists to hold results
-cluster_summary_list = []  # holds one dict per cluster with summary info
-clustered_reviews_list = []  # holds the individual review clusters
+    # Prepare lists to hold results
+    cluster_summary_list = []  # holds one dict per cluster with summary info
+    clustered_reviews_list = []  # holds the individual review clusters
 
-# Cluster reviews for each version
-for version in versions:
-    version_reviews = reviews[reviews['clean_version'] == version]
-    print(f"\nProcessing version: {version} - {len(version_reviews)} reviews")
+    # Cluster reviews for each version
+    for version in versions:
+        version_reviews = reviews[reviews['clean_version'] == version]
+        print(f"\nProcessing version: {version} - {len(version_reviews)} reviews")
 
-    if len(version_reviews) < 5:
-        print(f"Skipping version {version} (not enough reviews)")
-        continue
-
-    version_embeddings = np.array(version_reviews['embedding'].tolist())
-
-    # Cluster with HDBSCAN
-    # If you want an explanation:
-    # https://hdbscan.readthedocs.io/en/latest/how_hdbscan_works.html
-    clusterer = hdbscan.HDBSCAN(min_cluster_size=5, prediction_data=True)
-    labels = clusterer.fit_predict(version_embeddings)
-
-    version_reviews = version_reviews.copy()
-    version_reviews['cluster'] = labels
-
-    # Filter out noise points (label == -1)
-    clustered_reviews = version_reviews[version_reviews['cluster'] != -1]
-
-    if clustered_reviews.empty:
-        print(f"No good clusters found for version {version}")
-        continue
-
-    print(f"Found {clustered_reviews['cluster'].nunique()} clusters for version {version}")
-
-    # For each cluster, determine representative phrases (using TF-IDF) and update reviews with it.
-    for cluster_id in sorted(clustered_reviews['cluster'].unique()):
-        # Select reviews in the current cluster
-        cluster_subset = clustered_reviews[clustered_reviews['cluster'] == cluster_id]
-        cluster_texts = cluster_subset['cleaned_content'].tolist()
-
-        # Remove boring and uninformative reviews from phrase extraction
-        # Author note: Quite a bit of filtering was needed for this to make this visualizaiton feature not totally useless
-        filtered_texts = [t for t in cluster_texts if t not in BORING_REVIEWS and is_informative(t)]
-        if not filtered_texts:
-            print(f"Skipping cluster {cluster_id} in version {version} (not enough informative reviews)")
+        if len(version_reviews) < 5:
+            print(f"Skipping version {version} (not enough reviews)")
             continue
 
-        # Extract top terms using TF-IDF
-        # Explanation: https://www.learndatasci.com/glossary/tf-idf-term-frequency-inverse-document-frequency/
-        # This isn't perfect, but can help summarize for us.
-        tfidf = TfidfVectorizer(ngram_range=(3,4), strip_accents='unicode', max_features=5, stop_words='english')
-        tfidf_matrix = tfidf.fit_transform(filtered_texts)
-        top_terms = tfidf.get_feature_names_out()
-        cluster_label = ", ".join(top_terms)
+        version_embeddings = np.array(version_reviews['embedding'].tolist())
 
-        # Get the average score of the cluster
-        avg_score = cluster_subset[REVIEW_COLUMNS["Rating"]].mean()
+        # Cluster with HDBSCAN
+        # If you want an explanation:
+        # https://hdbscan.readthedocs.io/en/latest/how_hdbscan_works.html
+        clusterer = hdbscan.HDBSCAN(min_cluster_size=5, prediction_data=True)
+        labels = clusterer.fit_predict(version_embeddings)
 
-        if not is_valid_label(cluster_label):
-            print(f"Cluster {cluster_id} in version {version} filtered out due to nonsensical label: {cluster_label}")
+        version_reviews = version_reviews.copy()
+        version_reviews['cluster'] = labels
+
+        # Filter out noise points (label == -1)
+        clustered_reviews = version_reviews[version_reviews['cluster'] != -1]
+
+        if clustered_reviews.empty:
+            print(f"No good clusters found for version {version}")
             continue
 
-        print(f"Version {version} - Cluster {cluster_id}: {cluster_label} - Average Score: {avg_score}")
+        print(f"Found {clustered_reviews['cluster'].nunique()} clusters for version {version}")
 
-        # Record a summary for this cluster
-        cluster_summary_list.append({
-            "version": version,
-            "cluster_id": cluster_id,
-            "cluster_label": cluster_label,
-            "num_reviews": len(cluster_subset),
-            "avg_score": avg_score
-        })
+        # For each cluster, determine representative phrases (using TF-IDF) and update reviews with it.
+        for cluster_id in sorted(clustered_reviews['cluster'].unique()):
+            # Select reviews in the current cluster
+            cluster_subset = clustered_reviews[clustered_reviews['cluster'] == cluster_id]
+            cluster_texts = cluster_subset['cleaned_content'].tolist()
 
-        # Add the cluster label to each review in this cluster subset
-        cluster_subset = cluster_subset.copy()
-        cluster_subset['cluster_label'] = cluster_label
+            # Remove boring and uninformative reviews from phrase extraction
+            # Author note: Quite a bit of filtering was needed for this to make this visualizaiton feature not totally useless
+            filtered_texts = [t for t in cluster_texts if t not in BORING_REVIEWS and is_informative(t)]
+            if not filtered_texts:
+                print(f"Skipping cluster {cluster_id} in version {version} (not enough informative reviews)")
+                continue
 
-        # Append to global reviews list
-        clustered_reviews_list.append(cluster_subset)
+            # Extract top terms using TF-IDF
+            # Explanation: https://www.learndatasci.com/glossary/tf-idf-term-frequency-inverse-document-frequency/
+            # This isn't perfect, but can help summarize for us.
+            tfidf = TfidfVectorizer(ngram_range=(3,4), strip_accents='unicode', max_features=5, stop_words='english')
+            tfidf_matrix = tfidf.fit_transform(filtered_texts)
+            top_terms = tfidf.get_feature_names_out()
+            cluster_label = ", ".join(top_terms)
 
-# Combine all the clustered reviews and cluster summaries into DataFrames
-if clustered_reviews_list:
-    all_clustered_reviews = pd.concat(clustered_reviews_list, ignore_index=True)
-    # Save the detailed review clustering to CSV
-    all_clustered_reviews.to_csv(f"./Clusters/{app_name}_clustered_reviews_output.csv", index=False)
-    print(f"Saved detailed clustered reviews to 'Clusters/{app_name}_clustered_reviews_output.csv'")
-else:
-    print("No clustered reviews to save.")
+            # Get the average score of the cluster
+            avg_score = cluster_subset[REVIEW_COLUMNS["Rating"]].mean()
 
-if cluster_summary_list:
-    cluster_summary_df = pd.DataFrame(cluster_summary_list)
-    # Save the cluster summary to CSV
-    cluster_summary_df.to_csv(f"./Clusters/{app_name}_cluster_summary.csv", index=False)
-    print(f"Saved cluster summary to 'Clusters/{app_name}_cluster_summary.csv'")
-else:
-    print("No cluster summaries to save.")
+            if not is_valid_label(cluster_label):
+                print(f"Cluster {cluster_id} in version {version} filtered out due to nonsensical label: {cluster_label}")
+                continue
+
+            print(f"Version {version} - Cluster {cluster_id}: {cluster_label} - Average Score: {avg_score}")
+
+            # Record a summary for this cluster
+            cluster_summary_list.append({
+                "version": version,
+                "cluster_id": cluster_id,
+                "cluster_label": cluster_label,
+                "num_reviews": len(cluster_subset),
+                "avg_score": avg_score
+            })
+
+            # Add the cluster label to each review in this cluster subset
+            cluster_subset = cluster_subset.copy()
+            cluster_subset['cluster_label'] = cluster_label
+
+            # Append to global reviews list
+            clustered_reviews_list.append(cluster_subset)
+
+    # Combine all the clustered reviews and cluster summaries into DataFrames
+    if clustered_reviews_list:
+        all_clustered_reviews = pd.concat(clustered_reviews_list, ignore_index=True)
+        # Save the detailed review clustering to CSV
+        all_clustered_reviews.to_csv(f"./Clusters/{app_name}_clustered_reviews_output.csv", index=False)
+        print(f"Saved detailed clustered reviews to 'Clusters/{app_name}_clustered_reviews_output.csv'")
+    else:
+        print("No clustered reviews to save.")
+
+    if cluster_summary_list:
+        cluster_summary_df = pd.DataFrame(cluster_summary_list)
+        # Save the cluster summary to CSV
+        cluster_summary_df.to_csv(f"./Clusters/{app_name}_cluster_summary.csv", index=False)
+        print(f"Saved cluster summary to 'Clusters/{app_name}_cluster_summary.csv'")
+    else:
+        print("No cluster summaries to save.")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Cluster reviews for a specific app.')
+    parser.add_argument('app_name', type=str, help='Name of the app to process (e.g., Zoom, Webex, Firefox)')
+    args = parser.parse_args()
+    create_cluster(args.app_name)
