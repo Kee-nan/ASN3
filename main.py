@@ -244,11 +244,11 @@ class TraceVisualizer:
             [Input('timeline-chart', 'clickData')]
         )
         def display_details(clickData):
-            if self.clickData is None:
+            if clickData is None:
                 return "Click on a dot to view individual features here."
             
             # Determine the selected x value (release version or date)
-            point = self.clickData['points'][0]
+            point = clickData['points'][0]
             trace_index = point.get('curveNumber')
             if trace_index == 0:
                 # When feature clicked...
@@ -315,34 +315,34 @@ class TraceVisualizer:
                     style_data_conditional=[{'if': {'row_index': 'odd'}, 'backgroundColor': '#f1f1f1'}]
                 )
 
-        def setup_layout(self):
-            self.app.layout = html.Div([
-                html.H1("Release Timeline", style={
-                    'textAlign': 'center',
-                    'color': '#2c3e50',
-                    'marginBottom': '20px',
+    def setup_layout(self):
+        self.app.layout = html.Div([
+            html.H1("Release Timeline", style={
+                'textAlign': 'center',
+                'color': '#2c3e50',
+                'marginBottom': '20px',
+                'fontFamily': 'Arial'
+            }),
+            html.Div("This interactive timeline displays release versions (or dates) on the x-axis. The dot's size and color indicate the number of features included in that release. Click a dot to see detailed information.",
+                    style={'textAlign': 'center', 'marginBottom': '20px', 'fontFamily': 'Arial', 'color': '#555'}),
+            dcc.Graph(
+                id='timeline-chart',
+                figure=self.fig,
+                style={'height': '600px', 'width': '90%', 'margin': '0 auto'}
+            ),
+            html.Hr(style={'margin': '30px 0'}),
+            html.Div(
+                id='details-container',
+                children="Click on a dot to view individual features/reviews here.",
+                style={
+                    'padding': '20px',
+                    'backgroundColor': '#f8f9fa',
+                    'borderRadius': '5px',
+                    'marginTop': '20px',
                     'fontFamily': 'Arial'
-                }),
-                html.Div("This interactive timeline displays release versions (or dates) on the x-axis. The dot's size and color indicate the number of features included in that release. Click a dot to see detailed information.",
-                        style={'textAlign': 'center', 'marginBottom': '20px', 'fontFamily': 'Arial', 'color': '#555'}),
-                dcc.Graph(
-                    id='timeline-chart',
-                    figure=self.fig,
-                    style={'height': '600px', 'width': '90%', 'margin': '0 auto'}
-                ),
-                html.Hr(style={'margin': '30px 0'}),
-                html.Div(
-                    id='details-container',
-                    children="Click on a dot to view individual features/reviews here.",
-                    style={
-                        'padding': '20px',
-                        'backgroundColor': '#f8f9fa',
-                        'borderRadius': '5px',
-                        'marginTop': '20px',
-                        'fontFamily': 'Arial'
-                    }
-                )
-            ])
+                }
+            )
+        ])
 
     def run(self, debug=True):
         self.app.run(debug=debug)
