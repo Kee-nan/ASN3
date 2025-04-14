@@ -1,13 +1,14 @@
 import re
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objs as go
 from packaging import version as packaging_version
 import numpy as np
 
 # Dash components for interactivity
 from dash import dcc, html, dash_table, Dash
 from dash.dependencies import Input, Output
-from config import RELEASE_FILES, PATCH_COLUMNS, REVIEW_FILES, REVIEW_COLUMNS
+from config import RELEASE_FILES, PATCH_COLUMNS, REVIEW_FILES, REVIEW_COLUMNS, CLUSTER_FILES
 
 def clean_version(v):
     """
@@ -35,6 +36,8 @@ def make_plot(file_key):
     """
     release_file_path = RELEASE_FILES[f"{file_key}_releases"]
     review_file_path = REVIEW_FILES[f"{file_key}_reviews"]
+    cluster_summary_path = CLUSTER_FILES[f"{file_key}_summary"]
+    cluster_reviews_path = CLUSTER_FILES[f"{file_key}_clustered_reviews"]
     try:
         df_release = pd.read_csv(release_file_path, encoding='cp1252')
     except UnicodeDecodeError:
@@ -124,10 +127,74 @@ def make_plot(file_key):
         size='count',
         color='review_count',
         color_continuous_scale='Blues',
+        symbol_sequence=["diamond"],
         title=f"Interactive Timeline of Releases ({file_key.replace('_releases', '').capitalize()})",
         labels={'count': 'Number of Features', 'review_count': 'Number of Reviews', 'y_value': ''},
     )
-    
+
+    df_cluster = pd.read_csv(cluster_reviews_path)
+
+    df_summary = pd.read_csv(cluster_summary_path)
+    df_summary = df_summary.sort_values('version')
+
+    if file_key in ["webex", "zoom"]:
+        hover_template = (
+            "<b style='font-size: 14px'>Version: %{x}</b><br>"
+            "<b>Features:</b> %{marker.size}<br>"
+            "<b># Reviews:</b> %{marker.color:.0f}<br>"
+            "<b>Avg Rating:</b> %{y:.2f}<br>"
+            "<i>Click for details</i><extra></extra>"
+        )
+    else:
+        hover_template = (
+            "<b style='font-size: 14px'>Date: %{x}</b><br>"
+            "<b>Features:</b> %{marker.size}<br>"
+            "<b># Reviews:</b> %{marker.color:.0f}<br>"
+            "<b>Avg Rating:</b> %{y:.2f}<br>"
+            "<i>Click for details</i><extra></extra>"
+        )
+
+    # These update traces NEED to happen BEFORE adding our review cluster plot.
+    # Add hover template for features
+    fig.update_traces(hovertemplate=hover_template)
+
+    # Enhance markers with a clear outline
+    fig.update_traces(
+        customdata=grouped[x_col],
+        marker=dict(line=dict(width=1.5, color='darkgray'))
+    )
+
+    df_summary = df_summary
+    # Make sure cluster_label is clean
+    df_summary['cluster_label'] = df_summary['cluster_label'].fillna('Unknown').astype(str)
+
+    min_size = 10
+    max_size = 50
+
+    num_reviews = df_summary["num_reviews"]
+    size = ((num_reviews - num_reviews.min()) / (num_reviews.max() - num_reviews.min())) * (max_size - min_size) + min_size
+
+    fig.add_trace(go.Scatter(
+        x=df_summary["version"],
+        y=df_summary["avg_score"],
+        mode='markers',
+        marker=dict(
+            size=size,
+            color=df_summary["num_reviews"],
+            colorscale='Turbo',
+        ),
+        name="Cluster Summary",
+        showlegend=False,
+        customdata=np.stack([df_summary['cluster_label'], df_summary['num_reviews']], axis=-1),
+        hovertemplate=(
+            "<b>Review Cluster:</b> %{customdata[0]}<br>" +
+            "<b>Version:</b> %{x}<br>" +
+            "<b>Avg Score:</b> %{y:.2f}<br>" +
+            "<b># Reviews:</b> %{customdata[1]:,}<extra></extra>"
+        )
+    ))
+
+
     # Add a timeline baseline
     fig.add_shape(
         type="line",
@@ -166,39 +233,15 @@ def make_plot(file_key):
     
     # Adjust x-axis tick formatting for clarity
     fig.update_xaxes(tickangle=45, gridcolor='lightgray', tickfont=dict(size=10))
-    # Enhance markers with a clear outline
-    fig.update_traces(
-        customdata=grouped[x_col],
-        marker=dict(line=dict(width=1.5, color='darkgray'))
-    )
-    
-    # Enhanced hover template with consistent styling
-    if file_key in ["webex", "zoom"]:
-        hover_template = (
-            "<b style='font-size: 14px'>Version: %{x}</b><br>"
-            "<b>Features:</b> %{marker.size}<br>"
-            "<b># Reviews:</b> %{marker.color:.0f}<br>"
-            "<b>Avg Rating:</b> %{y:.2f}<br>"
-            "<i>Click for details</i><extra></extra>"
-        )
-    else:
-        hover_template = (
-            "<b style='font-size: 14px'>Date: %{x}</b><br>"
-            "<b>Features:</b> %{marker.size}<br>"
-            "<b># Reviews:</b> %{marker.color:.0f}<br>"
-            "<b>Avg Rating:</b> %{y:.2f}<br>"
-            "<i>Click for details</i><extra></extra>"
-        )
-    fig.update_traces(hovertemplate=hover_template)
-    
-    return fig, df_release, df_review
+        
+    return fig, df_release, df_review, df_cluster
 
 # Create the Dash app instance
 app = Dash(__name__)
 
 # Change this to firefox_releases, zoom_releases or webex_releases
 app_name = "firefox"
-fig, df_release, df_reviews = make_plot(app_name)
+fig, df_release, df_reviews, df_cluster = make_plot(app_name)
 
 app.layout = html.Div([
     # Header
@@ -221,7 +264,7 @@ app.layout = html.Div([
     # Details container: displays a table when a dot is clicked
     html.Div(
         id='details-container',
-        children="Click on a dot to view individual features here.",
+        children="Click on a dot to view individual features/reviews here.",
         style={
             'padding': '20px',
             'backgroundColor': '#f8f9fa',
@@ -236,55 +279,77 @@ app.layout = html.Div([
     Output('details-container', 'children'),
     [Input('timeline-chart', 'clickData')]
 )
-def display_feature_details(clickData):
+def display_details(clickData):
     if clickData is None:
         return "Click on a dot to view individual features here."
     
     # Determine the selected x value (release version or date)
     point = clickData['points'][0]
-    x_value = point['customdata']
+    trace_index = point.get('curveNumber')
+    if trace_index == 0:
+        # When feature clicked...
+        x_value = point['customdata']
+        
+        version = PATCH_COLUMNS.get("Version")
+        release_date = PATCH_COLUMNS["Date"]
+        
+        # Find all the individual features within a grouping so we can grrab they data
+        if version and (version in df_release.columns):
+            mask = df_release[version].apply(lambda v: clean_version(v)) == x_value
+            filtered = df_release[mask]
+        else:
+            filtered = df_release[df_release[release_date] == x_value]
+        
+        if filtered.empty:
+            return "No features found for the selected dot."
+        
+        # Reset the index and insert a new "ID" column for clarity
+        filtered = filtered.reset_index(drop=True)
+        filtered.insert(0, "ID", filtered.index + 1)
+        
+        # Display the details in a styled DataTable
+        return dash_table.DataTable(
+            data=filtered.to_dict('records'),
+            columns=[{"name": col, "id": col} for col in filtered.columns],
+            page_size=10,
+            style_table={
+                'overflowX': 'auto',
+                'border': '1px solid #ddd'
+            },
+            style_header={
+                'backgroundColor': '#f8f9fa',
+                'fontWeight': 'bold',
+                'border': '1px solid #ddd'
+            },
+            style_cell={
+                'textAlign': 'left',
+                'padding': '10px',
+                'fontFamily': 'Arial'
+            },
+            style_data_conditional=[{
+                'if': {'row_index': 'odd'},
+                'backgroundColor': '#f1f1f1'
+            }]
+        )
+    elif trace_index == 1:
+        # When review cluster clicked...
+        cluster_label = point['customdata'][0]
+        
+        filtered_reviews = df_cluster[df_cluster['cluster_label'] == cluster_label]
+        filtered_reviews = filtered_reviews.reset_index(drop=True)
+        filtered_reviews.insert(0, "ID", filtered_reviews.index + 1)
+
+        filtered_reviews = filtered_reviews[['ID', 'score', 'content']]
     
-    version = PATCH_COLUMNS.get("Version")
-    release_date = PATCH_COLUMNS["Date"]
-    
-    # Find all the individual features within a grouping so we can grrab they data
-    if version and (version in df_release.columns):
-        mask = df_release[version].apply(lambda v: clean_version(v)) == x_value
-        filtered = df_release[mask]
-    else:
-        filtered = df_release[df_release[release_date] == x_value]
-    
-    if filtered.empty:
-        return "No features found for the selected dot."
-    
-    # Reset the index and insert a new "ID" column for clarity
-    filtered = filtered.reset_index(drop=True)
-    filtered.insert(0, "ID", filtered.index + 1)
-    
-    # Display the details in a styled DataTable
-    return dash_table.DataTable(
-        data=filtered.to_dict('records'),
-        columns=[{"name": col, "id": col} for col in filtered.columns],
-        page_size=10,
-        style_table={
-            'overflowX': 'auto',
-            'border': '1px solid #ddd'
-        },
-        style_header={
-            'backgroundColor': '#f8f9fa',
-            'fontWeight': 'bold',
-            'border': '1px solid #ddd'
-        },
-        style_cell={
-            'textAlign': 'left',
-            'padding': '10px',
-            'fontFamily': 'Arial'
-        },
-        style_data_conditional=[{
-            'if': {'row_index': 'odd'},
-            'backgroundColor': '#f1f1f1'
-        }]
-    )
+        return dash_table.DataTable(
+            data=filtered_reviews.to_dict('records'),
+            columns=[{"name": col, "id": col} for col in filtered_reviews.columns],
+            page_size=10,
+            style_table={'overflowX': 'auto', 'border': '1px solid #ddd'},
+            style_header={'backgroundColor': '#f8f9fa', 'fontWeight': 'bold', 'border': '1px solid #ddd'},
+            style_cell={'textAlign': 'left', 'padding': '10px', 'fontFamily': 'Arial'},
+            style_data_conditional=[{'if': {'row_index': 'odd'}, 'backgroundColor': '#f1f1f1'}]
+        )
 
 if __name__ == '__main__':
     app.run(debug=True)
