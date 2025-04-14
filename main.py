@@ -6,6 +6,7 @@ from packaging import version as packaging_version
 from review_clustering import create_cluster
 import numpy as np
 import os
+import argparse
 
 # Dash components for interactivity
 from dash import dcc, html, dash_table, Dash
@@ -355,10 +356,14 @@ class TraceVisualizer:
     def run(self, debug=True):
         self.app.run(debug=debug)
 
-def main(app_name: str):
-    app_name = app_name.lower()
+def main():
+    parser = argparse.ArgumentParser(description='Visualize release timelines for different applications.')
+    parser.add_argument('app_name', type=str, help='Name of the application (e.g., Zoom, Webex, Firefox)')
+    args = parser.parse_args()
+    
+    app_name = args.app_name.lower()
     visualizer = TraceVisualizer(app_name=app_name)
     visualizer.run(debug=True)
 
 if __name__ == '__main__':
-    main("Zoom")
+    main()
