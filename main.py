@@ -77,8 +77,7 @@ class TraceVisualizer:
         rating_col = REVIEW_COLUMNS.get("Rating")
 
         
-        release_name = f"{file_key}_releases"
-        if version_col and (version_col in df_release.columns) and (release_name in ["webex_releases", "zoom_releases"]):
+        if version_col and (version_col in df_release.columns) and (file_key in ["webex", "zoom"]):
             # Group by trimmed release version (zoom/webex)
             grouped = df_release.groupby(version_col).size().reset_index(name='count')
             grouped["clean_version"] = grouped[version_col].apply(self.clean_version)
