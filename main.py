@@ -11,7 +11,14 @@ from dash.dependencies import Input, Output
 from config import RELEASE_FILES, PATCH_COLUMNS, REVIEW_FILES, REVIEW_COLUMNS, CLUSTER_FILES
 
 class TraceVisualizer:
+    def __init__(self, app_name="firefox"):
+        self.app_name = app_name
+        self.app = Dash(__name__)
+        self.fig, self.df_release, self.df_reviews, self.df_cluster = self.make_plot(app_name)
+        self.setup_callbacks()
+        self.setup_layout()
 
+    @staticmethod
     def clean_version(v):
         """
         Drops all the unneeded version info.
@@ -23,6 +30,7 @@ class TraceVisualizer:
             return pattern.group(1)
         return s
 
+    @staticmethod
     def extract_major_minor(version):
         match = re.search(r'(\d+)\.(\d+)', str(version))
         if match:
@@ -31,7 +39,7 @@ class TraceVisualizer:
         else:
             return None  # or "0.0" if you prefer
 
-    def make_plot(file_key):
+    def make_plot(self, file_key):
         """
         Reads CSV data and groups it by release version (for Zoom/Webex) or release date (for Firefox).
         Returns the Plotly figure and the DataFrame.
@@ -64,19 +72,19 @@ class TraceVisualizer:
         if version_col and (version_col in df_release.columns) and (release_name in ["webex_releases", "zoom_releases"]):
             # Group by trimmed release version (zoom/webex)
             grouped = df_release.groupby(version_col).size().reset_index(name='count')
-            grouped["clean_version"] = grouped[version_col].apply(clean_version)
+            grouped["clean_version"] = grouped[version_col].apply(self.clean_version)
             grouped["sort_key"] = grouped["clean_version"].apply(lambda x: packaging_version.parse(x))
             grouped = grouped.sort_values("sort_key")
             grouped[version_col] = grouped["clean_version"]
-            # grouped = grouped.drop(columns=["clean_version", "sort_key"])
             x_col = version_col
 
             # Handle reviews
-            # Webex and Zoom's versions are formatted slightly different in reviews, and thus need different functions
+            # Webex and Zoom's versions are formatted slightly different in reviews, 
+            # and thus need different functions
             if file_key == "webex":
-                df_review["clean_version"] = df_review[REVIEW_COLUMNS.get("Version")].apply(extract_major_minor)
+                df_review["clean_version"] = df_review[REVIEW_COLUMNS.get("Version")].apply(self.extract_major_minor)
             elif file_key == "zoom":
-                df_review["clean_version"] = df_review[REVIEW_COLUMNS.get("Version")].apply(clean_version)
+                df_review["clean_version"] = df_review[REVIEW_COLUMNS.get("Version")].apply(self.clean_version)
             
             avg_ratings = df_review.groupby("clean_version")[rating_col].mean().reset_index()
             avg_ratings.rename(columns={rating_col: "avg_rating"}, inplace=True)
@@ -95,10 +103,7 @@ class TraceVisualizer:
             grouped = grouped.sort_values(x_col)
             df_review = df_review.sort_values(review_date_col)
 
-            # Get a list of all the feature release dates
             release_dates = grouped[x_col].to_list()
-
-            # Need max time to grab all reviews that happen after the last feature release
             release_dates.append(pd.Timestamp.max)
 
             # Each review is binned by its date to the feature release date that happened before it
@@ -119,7 +124,6 @@ class TraceVisualizer:
             grouped = grouped.merge(avg_ratings, left_on=x_col, right_on='release_bin', how='left')
             grouped = grouped.merge(review_counts, left_on=x_col, right_on='release_bin', how='left')
 
-
         grouped['y_value'] = grouped['avg_rating'].fillna(3)
         
         fig = px.scatter(
@@ -135,7 +139,6 @@ class TraceVisualizer:
         )
 
         df_cluster = pd.read_csv(cluster_reviews_path)
-
         df_summary = pd.read_csv(cluster_summary_path)
         df_summary = df_summary.sort_values('version')
 
@@ -159,14 +162,12 @@ class TraceVisualizer:
         # These update traces NEED to happen BEFORE adding our review cluster plot.
         # Add hover template for features
         fig.update_traces(hovertemplate=hover_template)
-
         # Enhance markers with a clear outline
         fig.update_traces(
             customdata=grouped[x_col],
             marker=dict(line=dict(width=1.5, color='darkgray'))
         )
 
-        df_summary = df_summary
         # Make sure cluster_label is clean
         df_summary['cluster_label'] = df_summary['cluster_label'].fillna('Unknown').astype(str)
 
@@ -194,8 +195,7 @@ class TraceVisualizer:
                 "<b>Avg Score:</b> %{y:.2f}<br>" +
                 "<b># Reviews:</b> %{customdata[1]:,}<extra></extra>"
             )
-        ))
-
+        ))  
 
         # Add a timeline baseline
         fig.add_shape(
@@ -228,133 +228,128 @@ class TraceVisualizer:
                 mirror=True
             ),
             plot_bgcolor="white",
-            title_x=0.5,  # Center the title
+            title_x=0.5, # Center the title
             margin=dict(t=70, l=50, r=50, b=70),
             font=dict(family="Arial", size=12, color="#333"),
         )
-        
+
         # Adjust x-axis tick formatting for clarity
         fig.update_xaxes(tickangle=45, gridcolor='lightgray', tickfont=dict(size=10))
             
         return fig, df_release, df_review, df_cluster
 
-    @app.callback(
-        Output('details-container', 'children'),
-        [Input('timeline-chart', 'clickData')]
-    )
-    def display_details(clickData):
-        if clickData is None:
-            return "Click on a dot to view individual features here."
-        
-        # Determine the selected x value (release version or date)
-        point = clickData['points'][0]
-        trace_index = point.get('curveNumber')
-        if trace_index == 0:
-            # When feature clicked...
-            x_value = point['customdata']
+    def setup_callbacks(self):
+        @self.app.callback(
+            Output('details-container', 'children'),
+            [Input('timeline-chart', 'clickData')]
+        )
+        def display_details(clickData):
+            if self.clickData is None:
+                return "Click on a dot to view individual features here."
             
-            version = PATCH_COLUMNS.get("Version")
-            release_date = PATCH_COLUMNS["Date"]
+            # Determine the selected x value (release version or date)
+            point = self.clickData['points'][0]
+            trace_index = point.get('curveNumber')
+            if trace_index == 0:
+                # When feature clicked...
+                x_value = point['customdata']
+                
+                version = PATCH_COLUMNS.get("Version")
+                release_date = PATCH_COLUMNS["Date"]
+                
+                # Find all the individual features within a grouping so we can grrab they data
+                if version and (version in self.df_release.columns):
+                    mask = self.df_release[version].apply(lambda v: self.clean_version(v)) == x_value
+                    filtered = self.df_release[mask]
+                else:
+                    filtered = self.df_release[self.df_release[release_date] == x_value]
+                
+                if filtered.empty:
+                    return "No features found for the selected dot."
+                
+                # Reset the index and insert a new "ID" column for clarity
+                filtered = filtered.reset_index(drop=True)
+                filtered.insert(0, "ID", filtered.index + 1)
+                
+                # Display the details in a styled DataTable
+                return dash_table.DataTable(
+                    data=filtered.to_dict('records'),
+                    columns=[{"name": col, "id": col} for col in filtered.columns],
+                    page_size=10,
+                    style_table={
+                        'overflowX': 'auto',
+                        'border': '1px solid #ddd'
+                    },
+                    style_header={
+                        'backgroundColor': '#f8f9fa',
+                        'fontWeight': 'bold',
+                        'border': '1px solid #ddd'
+                    },
+                    style_cell={
+                        'textAlign': 'left',
+                        'padding': '10px',
+                        'fontFamily': 'Arial'
+                    },
+                    style_data_conditional=[{
+                        'if': {'row_index': 'odd'},
+                        'backgroundColor': '#f1f1f1'
+                    }]
+                )
+            elif trace_index == 1:
+                # When review cluster clicked...
+                cluster_label = point['customdata'][0]
+                
+                filtered_reviews = self.df_cluster[self.df_cluster['cluster_label'] == cluster_label]
+                filtered_reviews = filtered_reviews.reset_index(drop=True)
+                filtered_reviews.insert(0, "ID", filtered_reviews.index + 1)
+
+                filtered_reviews = filtered_reviews[['ID', 'score', 'content']]
             
-            # Find all the individual features within a grouping so we can grrab they data
-            if version and (version in df_release.columns):
-                mask = df_release[version].apply(lambda v: clean_version(v)) == x_value
-                filtered = df_release[mask]
-            else:
-                filtered = df_release[df_release[release_date] == x_value]
-            
-            if filtered.empty:
-                return "No features found for the selected dot."
-            
-            # Reset the index and insert a new "ID" column for clarity
-            filtered = filtered.reset_index(drop=True)
-            filtered.insert(0, "ID", filtered.index + 1)
-            
-            # Display the details in a styled DataTable
-            return dash_table.DataTable(
-                data=filtered.to_dict('records'),
-                columns=[{"name": col, "id": col} for col in filtered.columns],
-                page_size=10,
-                style_table={
-                    'overflowX': 'auto',
-                    'border': '1px solid #ddd'
-                },
-                style_header={
-                    'backgroundColor': '#f8f9fa',
-                    'fontWeight': 'bold',
-                    'border': '1px solid #ddd'
-                },
-                style_cell={
-                    'textAlign': 'left',
-                    'padding': '10px',
+                return dash_table.DataTable(
+                    data=filtered_reviews.to_dict('records'),
+                    columns=[{"name": col, "id": col} for col in filtered_reviews.columns],
+                    page_size=10,
+                    style_table={'overflowX': 'auto', 'border': '1px solid #ddd'},
+                    style_header={'backgroundColor': '#f8f9fa', 'fontWeight': 'bold', 'border': '1px solid #ddd'},
+                    style_cell={'textAlign': 'left', 'padding': '10px', 'fontFamily': 'Arial'},
+                    style_data_conditional=[{'if': {'row_index': 'odd'}, 'backgroundColor': '#f1f1f1'}]
+                )
+
+        def setup_layout(self):
+            self.app.layout = html.Div([
+                html.H1("Release Timeline", style={
+                    'textAlign': 'center',
+                    'color': '#2c3e50',
+                    'marginBottom': '20px',
                     'fontFamily': 'Arial'
-                },
-                style_data_conditional=[{
-                    'if': {'row_index': 'odd'},
-                    'backgroundColor': '#f1f1f1'
-                }]
-            )
-        elif trace_index == 1:
-            # When review cluster clicked...
-            cluster_label = point['customdata'][0]
-            
-            filtered_reviews = df_cluster[df_cluster['cluster_label'] == cluster_label]
-            filtered_reviews = filtered_reviews.reset_index(drop=True)
-            filtered_reviews.insert(0, "ID", filtered_reviews.index + 1)
+                }),
+                html.Div("This interactive timeline displays release versions (or dates) on the x-axis. The dot's size and color indicate the number of features included in that release. Click a dot to see detailed information.",
+                        style={'textAlign': 'center', 'marginBottom': '20px', 'fontFamily': 'Arial', 'color': '#555'}),
+                dcc.Graph(
+                    id='timeline-chart',
+                    figure=self.fig,
+                    style={'height': '600px', 'width': '90%', 'margin': '0 auto'}
+                ),
+                html.Hr(style={'margin': '30px 0'}),
+                html.Div(
+                    id='details-container',
+                    children="Click on a dot to view individual features/reviews here.",
+                    style={
+                        'padding': '20px',
+                        'backgroundColor': '#f8f9fa',
+                        'borderRadius': '5px',
+                        'marginTop': '20px',
+                        'fontFamily': 'Arial'
+                    }
+                )
+            ])
 
-            filtered_reviews = filtered_reviews[['ID', 'score', 'content']]
-        
-            return dash_table.DataTable(
-                data=filtered_reviews.to_dict('records'),
-                columns=[{"name": col, "id": col} for col in filtered_reviews.columns],
-                page_size=10,
-                style_table={'overflowX': 'auto', 'border': '1px solid #ddd'},
-                style_header={'backgroundColor': '#f8f9fa', 'fontWeight': 'bold', 'border': '1px solid #ddd'},
-                style_cell={'textAlign': 'left', 'padding': '10px', 'fontFamily': 'Arial'},
-                style_data_conditional=[{'if': {'row_index': 'odd'}, 'backgroundColor': '#f1f1f1'}]
-            )
+    def run(self, debug=True):
+        self.app.run(debug=debug)
 
+def main():
+    visualizer = TraceVisualizer(app_name="firefox")
+    visualizer.run(debug=True)
 
-    def main():
-        # Create the Dash app instance
-        app = Dash(__name__)
-
-        # Change this to firefox_releases, zoom_releases or webex_releases
-        app_name = "firefox"
-        fig, df_release, df_reviews, df_cluster = make_plot(app_name)
-
-        app.layout = html.Div([
-            # Header
-            html.H1("Release Timeline", style={
-                'textAlign': 'center',
-                'color': '#2c3e50',
-                'marginBottom': '20px',
-                'fontFamily': 'Arial'
-            }),
-            # Instructional text for the user
-            html.Div("This interactive timeline displays release versions (or dates) on the x-axis. The dot's size and color indicate the number of features included in that release. Click a dot to see detailed information.",
-                    style={'textAlign': 'center', 'marginBottom': '20px', 'fontFamily': 'Arial', 'color': '#555'}),
-            # Chart
-            dcc.Graph(
-                id='timeline-chart',
-                figure=fig,
-                style={'height': '600px', 'width': '90%', 'margin': '0 auto'}
-            ),
-            html.Hr(style={'margin': '30px 0'}),
-            # Details container: displays a table when a dot is clicked
-            html.Div(
-                id='details-container',
-                children="Click on a dot to view individual features/reviews here.",
-                style={
-                    'padding': '20px',
-                    'backgroundColor': '#f8f9fa',
-                    'borderRadius': '5px',
-                    'marginTop': '20px',
-                    'fontFamily': 'Arial'
-                }
-            )
-        ])
-
-        app.run(debug=True)
 if __name__ == '__main__':
     main()
