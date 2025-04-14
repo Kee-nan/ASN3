@@ -280,6 +280,10 @@ class TraceVisualizer:
                 filtered = filtered.reset_index(drop=True)
                 filtered.insert(0, "ID", filtered.index + 1)
                 
+                # Remove columns where all values are empty/null
+                non_empty_columns = [col for col in filtered.columns if not filtered[col].isna().all()]
+                filtered = filtered[non_empty_columns]
+                
                 # Display the details in a styled DataTable
                 return dash_table.DataTable(
                     data=filtered.to_dict('records'),
