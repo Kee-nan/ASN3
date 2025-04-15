@@ -30,6 +30,14 @@ Bubble **size** reflects the number of reviews, while **version node size** repr
 
 ---
 
+## 🗂️ Data Included
+
+This repository includes:
+- `Releases/` folder - CSV and Excel files for feature release data  
+- `Reviews/` folder - CSV and Excel files for user app reviews
+
+---
+
 
 ## 💻 **Apps covered (Jan 2022 – Jan 2024):**
 - **Zoom**: 571 features, 153,779 reviews  
