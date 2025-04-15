@@ -116,8 +116,13 @@ python3 main.py <app_name>
 
 The software-feature and app-review datasets are provided as follows:
 
+<!---
 - Features
 - App Reviews
+--->
+
+- Features
+  - Zoom released features (from Jan, 2022 to Jan, 2024; 571 total features provided);
 
 
 ---
