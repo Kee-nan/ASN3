@@ -1,7 +1,23 @@
 # Assignment 3: Team Yellow 🟡
 ### CS 5128/6028: Large Scale Software Engineering
 
-#
+---
+# Team Members
+- Niharika Mysore Gowda
+- Nishit Grover
+- Keenan Herbe
+- Anay Abhijit Joshi
+- Aidan Kovacic
+- Anwar Sayeed Mohammed
+- Arya Narke
+- Tristan Pommering
+- Daksh Prajapati
+- Ethan Reed
+- Russell Toney
+
+---
+
+<!---#--->
 
 # Temporal Traceability Map 🕒✨  
 #### *Tracing Software Features to User Feedback in Time*
