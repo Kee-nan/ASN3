@@ -31,9 +31,14 @@ Bubble **size** reflects the number of reviews, while **version node size** repr
 ---
 
 
+## **Apps covered (Jan 2022 – Jan 2024):**
+- **Zoom**: 571 features, 153,779 reviews  
+- **Webex**: 258 features, 55,558 reviews  
+- **Firefox**: 171 features, 56,382 reviews
 
+---
 
-### To use this repository
+## To use this repository
 - Setup a virtualenv `python -m venv venv`
 - Run `source venv/bin/activate`
 - Pip install `pip install -r requirements.txt`
