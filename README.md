@@ -1,4 +1,6 @@
-# ASN3
+# Team Yellow: Assignment 3
+
+#
 
 # Temporal Traceability Map 🕒✨  
 *Tracing Software Features to User Feedback in Time*
@@ -9,6 +11,13 @@ Create a virtual environment and pip install the depencencies in the requirement
 
 Each folder, releases and reveiws, have both an excel file and a CSV file for each companies respective thing
 --->
+
+This repository contains the source code and data for **ASN3** — a novel temporal visualization that maps **software feature releases** to corresponding **user app reviews** over time. Designed to enhance traceability and sentiment analysis, this tool enables stakeholders to quickly assess how users react to specific feature rollouts.
+
+---
+
+
+
 
 ### To use this repository
 - Setup a virtualenv `python -m venv venv`
