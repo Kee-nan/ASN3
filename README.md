@@ -39,3 +39,4 @@ Bubble **size** reflects the number of reviews, while **version node size** repr
 - Pip install `pip install -r requirements.txt`
 - Run `python main.py <app_name>`
 - Click on the link provided in console by the application.
+
