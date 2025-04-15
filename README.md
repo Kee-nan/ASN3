@@ -19,7 +19,7 @@
 
 <!---#--->
 
-# Temporal Traceability Map 🕒✨  
+# Temporal Traceability Map/Graph 🕒✨  
 #### *Tracing Software Features to User Feedback in Time*
 
 <!---
