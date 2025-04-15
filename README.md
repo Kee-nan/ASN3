@@ -85,7 +85,7 @@ python3 main.py <app_name>
 ---
 
 
-## 🟡 Temporal Traceability in Practice: Who Benefits and How?
+## 🤩 Temporal Traceability in Practice: Who Benefits and How?
 
 - 🔷 **Clear Visual Language** - Diamonds for features, circles for reviews.
 - 📊 **Sentiment Clusters** - Easily explore positive and negative feedback.
@@ -95,4 +95,6 @@ python3 main.py <app_name>
 - 🧩 **Unified View** - All data in one place to save time and effort.
 
 ---
+
+
 
