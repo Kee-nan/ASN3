@@ -123,7 +123,10 @@ The software-feature and app-review datasets are provided as follows:
 
 - Features
   - Zoom released features (from Jan, 2022 to Jan, 2024; 571 total features provided);
+  - Webex released features (from Jan, 2022 to Dec, 2023; 258 total features provided); and
+  - Firefox released features (from Jan, 2022 to Jan, 2024; 171 total features provided).
 
+ - App Reviews
 
 ---
 
