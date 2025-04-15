@@ -21,10 +21,10 @@ This repository contains the source code and data for **ASN3** - a novel tempora
 ## 🔍 Project Overview
 
 Our visualization introduces:
-- 💎 **Diamonds** for representing feature releases  
-- 🔴 **Circles** for clustering related user reviews  
-- 📈 **X-axis** encoding time and versioning  
-- 📊 **Y-axis** showing average user ratings (sentiment)
+- 💎 **Diamonds** for representing feature releases.  
+- 🔴 **Circles** for clustering related user reviews.  
+- 📈 **X-axis** encoding time and versioning.  
+- 📊 **Y-axis** showing average user ratings (sentiment).
 
 Bubble **size** reflects the number of reviews, while **version node size** represents the number of features released. This layout allows intuitive exploration of **temporal traceability** between product changes and user feedback...
 
