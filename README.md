@@ -1,4 +1,4 @@
-# Team Yellow: Assignment 3
+# Assignment 3: Team Yellow 🟡
 ### CS 5128/6028: Large Scale Software Engineering
 
 #
