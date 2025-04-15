@@ -85,8 +85,6 @@ python3 main.py <app_name>
 ---
 
 
----
-
 ## 🟡 Temporal Traceability in Practice: Who Benefits and How?
 
 - 🔷 **Clear Visual Language** - Diamonds for features, circles for reviews.
