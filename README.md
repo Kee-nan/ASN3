@@ -33,8 +33,8 @@ Bubble **size** reflects the number of reviews, while **version node size** repr
 ## 🗂️ Data Included
 
 This repository includes:
-- `Releases/` folder - CSV and Excel files for feature release data  
-- `Reviews/` folder - CSV and Excel files for user app reviews
+- 📂 `Releases/` folder - CSV and Excel files for feature release data  
+- 📂 `Reviews/` folder - CSV and Excel files for user app reviews
 
 ---
 
@@ -46,10 +46,37 @@ This repository includes:
 
 ---
 
+
+<!---
 ## 📂 To use this repository
 - Setup a virtualenv `python -m venv venv`
 - Run `source venv/bin/activate`
 - Pip install `pip install -r requirements.txt`
 - Run `python main.py <app_name>`
 - Click on the link provided in console by the application.
+--->
 
+
+## 🚀 To Use This Repository
+
+Follow these steps to set up and run the app locally:
+
+```bash
+# 1. Clone the repo
+git clone https://github.com/Kee-nan/ASN3
+
+# 2. Setup virtual environment
+python -m venv venv
+source venv/bin/activate   # For Mac/Linux
+# OR
+.\venv\Scripts\activate    # For Windows
+
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Run the application
+python main.py <app_name>
+# OR
+python3 main.py <app_name>
+
+# 5. Click on the link provided in console by the application.
