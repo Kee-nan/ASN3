@@ -116,6 +116,8 @@ python3 main.py <app_name>
 
 The software-feature and app-review datasets are provided as follows:
 
+- Features
+- App Reviews
 
 
 ---
