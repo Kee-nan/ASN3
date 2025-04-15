@@ -80,3 +80,6 @@ python main.py <app_name>
 python3 main.py <app_name>
 
 # 5. Click on the link provided in console by the application.
+```
+
+---
