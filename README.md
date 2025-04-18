@@ -51,7 +51,7 @@ Bubble **size** reflects the number of reviews, while **version node size** repr
 This repository includes:
 - 📂 `Releases/` folder - CSV and Excel files for feature release data  
 - 📂 `Reviews/` folder - CSV and Excel files for user app reviews
-
+- 📂 `Clusters/` folder - CSV files that contain the output of `review_clustering.py`
 ---
 
 
@@ -81,22 +81,32 @@ Follow these steps to set up and run the app locally:
 # 1. Clone the repo
 git clone https://github.com/Kee-nan/ASN3
 
-# 2. Setup virtual environment
+# 2. Use git-lfs to get CSV files
+git lfs install # If you don't have git-lfs set up
+git lfs pull # Get files
+
+# 3. Setup virtual environment
 python -m venv venv
 source venv/bin/activate   # For Mac/Linux
 # OR
 .\venv\Scripts\activate    # For Windows
 
-# 3. Install dependencies
+# 4. Install dependencies
 pip install -r requirements.txt
 
-# 4. Run the application
+# 5. Run the application
 python main.py <app_name>
 # OR
 python3 main.py <app_name>
 
-# 5. Click on the link provided in console by the application.
+# 6. Click on the link provided in console by the application.
 ```
+### NOTE IF GIT LFS DOES NOT WORK:
+We've noticed that we're sometimes being rate-limited by GitHub for LFS, meaning you cannot pull any of the CSVs.
+If this happens to you, we have a Google Drive folder that holds all of the CSVs. [Google Drive Link](https://drive.google.com/drive/folders/1m8kfVwJXnWNPBFtJpnz6KkS-Y843mjKt?usp=sharing)
+
+This drive link contains the CSVs for `Releases/`, `Clusters/` and `Reviews/` and should be able to be dragged and dropped into the repository.
+We apologize for the inconvenience. 
 
 ---
 
