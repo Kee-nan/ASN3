@@ -108,6 +108,37 @@ If this happens to you, we have a Google Drive folder that holds all of the CSVs
 This drive link contains the CSVs for `Releases/`, `Clusters/` and `Reviews/` and should be able to be dragged and dropped into the repository.
 We apologize for the inconvenience. 
 
+We have attempted to fix this by looking into Git LFs objects settings based on similar issues we found people had on stack overflow, but the github has since removed it.
+Attempting to find an alternative solution, ChatGPT produced this outcome:
+
+"
+The "Include Git LFS objects" checkbox used to be available in the "Repository Settings > Archives" section on GitHub, 
+allowing you to include Large File Storage (LFS) objects when generating repository archives like ZIP or tarballs. 
+However, as of recent updates:
+🔍 This checkbox no longer exists in the GitHub UI.
+GitHub has changed how Git LFS objects are handled in repository archives:
+
+✅ What's the current behavior?
+When downloading an archive (ZIP or tarball) from the main branch or any commit, Git LFS objects are not included by default.
+If you need the LFS objects, you should clone the repository using Git and Git LFS rather than downloading it as a ZIP.
+
+💡 What should you do instead?
+To get a repo with LFS files included, do this:
+
+git lfs install
+git clone https://github.com/username/repository.git
+
+That way, Git LFS will download all the actual LFS-tracked files.
+If you still need to create an archive with LFS files included (for deployment, distribution, etc.), you'll have to:
+Clone the repo locally with LFS.
+Ensure all LFS files are pulled (git lfs pull if needed).
+Manually zip it:
+
+zip -r your-archive-name.zip your-repo-folder
+"
+
+We hope that, should you have issues with this, one of the provided solutions can help
+Thank you for your understanding.
 ---
 
 
